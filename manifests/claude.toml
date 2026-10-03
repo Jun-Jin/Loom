@@ -1,0 +1,35 @@
+# manifests/claude.toml — Claude Code detection manifest
+#
+# For the minimal parser (scripts/lib/manifest.sh). Only single-line key = "value" entries are supported.
+# pattern is an ERE passed to grep -E verbatim, with no escape processing.
+# region: full | last_line | top_non_empty_lines(N) | bottom_lines(N)
+# Rules are evaluated top to bottom and the first match wins (keep them ordered blocked → working → idle).
+
+agent = "claude"
+
+# Fingerprints identifying this pane as Claude Code (any single match qualifies)
+# "shift+tab to cycle" is the bottom status line always shown in the v2 UI (it still matches after the banner has scrolled away)
+[[identify]]
+region = "full"
+pattern = "esc to interrupt|Welcome to Claude Code|\? for shortcuts|Claude Code v[0-9]|No, and tell Claude|shift\+tab to cycle"
+
+# Waiting on a user decision: approval prompts, questions, etc.
+[[rule]]
+status = "blocked"
+region = "bottom_lines(12)"
+pattern = "Do you want|Allow this|Yes, and don't ask|No, and tell Claude|❯ 1\."
+
+# Working (spinner line)
+# The v2 UI renders "✳ Computing… (1m 23s · ↓ 3.2k tokens)" with a randomly chosen verb,
+# so use "… (digits" as the stable marker. The spinner appears above the prompt box,
+# 7 lines up from the last line, so the region is widened to 10 lines
+[[rule]]
+status = "working"
+region = "bottom_lines(10)"
+pattern = "esc to interrupt|Compacting|… \([0-9]"
+
+# Waiting for input (resting at the prompt; the v2 UI uses "❯ " plus horizontal rules, with no box-drawing characters)
+[[rule]]
+status = "idle"
+region = "bottom_lines(4)"
+pattern = "│ >|╰─|^❯|^[[:space:]]*>[[:space:]]*$"
