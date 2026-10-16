@@ -1,0 +1,12 @@
+  >_ OpenAI Codex (v0.163.0)
+     /tmp/project
+
+› hello
+
+• Working (1s • esc to interrupt)
+
+
+› Ask Codex to do anything
+
+  GPT-6.1-Sol default · /tmp/project · ⠦
+  ← for agents · ? for shortcuts

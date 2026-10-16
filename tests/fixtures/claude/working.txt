@@ -1,0 +1,14 @@
+❯ Run the bash command sleep 6 and then reply done
+
+⏺ Bash(sleep 6)
+  ⎿  Running…
+     (ctrl+b ctrl+b (twice) to run in background)
+
+✻ Sublimating… (7s · ↓ 194 tokens)
+  ⎿  Tip: Use ctrl+v to paste images from your clipboard
+
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+    [Fable 5.1] | 📁 /tmp/project | 🧠 4% | 💰 $0.6…
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents

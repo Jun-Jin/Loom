@@ -1,0 +1,21 @@
+ ❯ Create a new file named loomtest.txt in this folder containing the word hello.             14:00 ┃
+                                                                                                    ┃
+ ○ Edit  Create loomtest.txt                                                                        ┃
+                                                                                                    ┃
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Create file                                                                                      │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────── │
+│ loomtest.txt +2 -0                                                                               │
+│ /Users/me/works/project                                                                          │
+│                                                                                                  │
+│ 1 +   hello                                                                                      │
+│ 2 +                                                                                              │
+│                                                                                                  │
+│ Do you want to create /Users/me/works/project/loomtest.txt?                                      │
+│                                                                                                  │
+│ ❯ 1. Yes                                                                                         │
+│   2. Yes, and don't ask again for file operations when in this repo (~/works/project)            │
+│   3. No, and tell Copilot what to do differently (Esc to stop)                                   │
+│                                                                                                  │
+│ ↑/↓ to navigate · enter to select · esc to cancel                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

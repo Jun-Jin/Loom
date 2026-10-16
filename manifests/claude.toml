@@ -7,11 +7,14 @@
 
 agent = "claude"
 
-# Fingerprints identifying this pane as Claude Code (any single match qualifies)
-# "shift+tab to cycle" is the bottom status line always shown in the v2 UI (it still matches after the banner has scrolled away)
+# Fingerprints identifying this pane as Claude Code (any single match qualifies).
+# Manifests are tried in file-name order (claude < codex < copilot), so every fingerprint must be unique to Claude Code:
+# "esc to interrupt", "? for shortcuts" and "← for agents" also appear in Codex and must not be used here.
+# The mode line ("⏵⏵ auto mode on (shift+tab to cycle)", "⏸ manual mode on", "⏵⏵ accept edits on", "⏸ plan mode on")
+# is always shown at the bottom of the v2 UI, so it still matches after the banner has scrolled away.
 [[identify]]
 region = "full"
-pattern = "esc to interrupt|Welcome to Claude Code|\? for shortcuts|Claude Code v[0-9]|No, and tell Claude|shift\+tab to cycle"
+pattern = "Welcome to Claude Code|Claude Code v[0-9]|No, and tell Claude|shift\+tab to cycle|(⏵⏵|⏸) (auto|manual|plan) mode on|⏵⏵ accept edits on"
 
 # Waiting on a user decision: approval prompts, questions, etc.
 [[rule]]

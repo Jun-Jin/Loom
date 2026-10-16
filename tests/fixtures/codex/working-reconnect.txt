@@ -1,0 +1,12 @@
+› hello
+
+• Reconnecting... 2/5 (1s • esc to interrupt)
+  └ Unexpected status 401 Unauthorized: {
+      "error": {
+        "message":, url: wss://api.openai.com/v1/responses, cf-ray: …
+
+
+› Ask Codex to do anything
+
+  GPT-6.1-Sol default · /tmp/project · ⠦
+  ← for agents · ? for shortcuts

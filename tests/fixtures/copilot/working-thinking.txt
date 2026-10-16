@@ -1,0 +1,6 @@
+ ❯ Create a new file named loomtest.txt in this folder containing the word hello.             14:00
+ ~/works/project [⎇ main%]                                                Session: 0.23 AIC used
+──────────────────────────────────────────────────────────────────────────────────────────────
+❯
+──────────────────────────────────────────────────────────────────────────────────────────────
+ ○ Working esc edit prompt                                                      Auto → gpt-6-luna

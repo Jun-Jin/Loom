@@ -1,8 +1,5 @@
 # Local Claude Code tooling (skills, etc.) — kept out of the public repo
 /.claude/
 
-# Build product
-/bin/
-
 .env
 *.env

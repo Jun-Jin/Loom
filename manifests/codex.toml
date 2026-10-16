@@ -1,0 +1,44 @@
+# manifests/codex.toml — Codex CLI (OpenAI) detection manifest
+#
+# For the minimal parser (scripts/lib/manifest.sh). Only single-line key = "value" entries are supported.
+# pattern is an ERE passed to grep -E verbatim, with no escape processing.
+# region: full | last_line | top_non_empty_lines(N) | bottom_lines(N)
+# Rules are evaluated top to bottom and the first match wins (keep them ordered blocked → working → idle).
+#
+# Captured against codex-cli 0.163.0. Screen layout (bottom of the pane):
+#   • Working (12s • esc to interrupt)        <- status line, shown above the composer while a turn runs
+#   › Ask Codex to do anything                <- composer (placeholder when empty)
+#     GPT-x default · /path/to/cwd            <- footer
+#     ← for agents · ? for shortcuts
+# Approval requests are drawn as a list in the bottom pane:
+#   Would you like to run the following command?
+#   > 1. Yes, proceed
+#     2. Yes, and don't ask again for commands that start with `…`
+#     3. No, and tell Codex what to do differently
+
+agent = "codex"
+
+# Fingerprints identifying this pane as Codex (any single match qualifies).
+# Manifests are tried in file-name order, so every fingerprint must be unique to Codex:
+# "esc to interrupt", "? for shortcuts" and "← for agents" also appear in Claude Code and are deliberately not used.
+[[identify]]
+region = "full"
+pattern = "OpenAI Codex \(v[0-9]|Welcome to Codex|Ask Codex to do anything|tell Codex what to do|Codex is allowed to do"
+
+# Waiting on a user decision: command/edit/network approvals, MCP elicitation, the login chooser
+[[rule]]
+status = "blocked"
+region = "bottom_lines(20)"
+pattern = "Would you like to|Do you want to approve|needs your approval|No, and tell Codex|Sign in with ChatGPT|Press esc to go back"
+
+# Working: the status line "• Working (3s • esc to interrupt)" (the verb varies; "Reconnecting... 2/5" uses the same suffix)
+[[rule]]
+status = "working"
+region = "bottom_lines(12)"
+pattern = "esc to interrupt"
+
+# Waiting for input: the composer prompt "› " (placeholder "Ask Codex to do anything" when empty)
+[[rule]]
+status = "idle"
+region = "bottom_lines(6)"
+pattern = "^›|\? for shortcuts"

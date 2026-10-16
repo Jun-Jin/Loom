@@ -1,0 +1,389 @@
+#!/bin/sh
+# bin/loom — CLI サブコマンドディスパッチ
+# M3 時点: list/get/send/read/focus/wait/start/worktree + integration/detect/notify
+
+set -u
+
+LOOM_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+. "$LOOM_ROOT/scripts/lib/common.sh"
+
+TAB=$(printf '\t')
+
+usage() {
+	cat <<EOF
+usage: loom <command> [args]
+
+commands:
+  list [--json]                  全エージェントと状態の一覧
+  get <target>                   単一エージェントの詳細
+  send [--no-enter] <target> <text...>
+                                 テキストを送信する(既定で末尾に Enter)
+  read <target> [--lines N]      出力を読む(既定は可視画面、--lines は末尾 N 行)
+  focus <target>                 対象 pane へジャンプ
+  wait <target> --status <s> [--timeout SEC]
+                                 指定状態(working|idle|blocked)になるまで待つ
+  wait <target> --match <re> [--timeout SEC]
+                                 出力に ERE が現れるまで待つ
+  start <name> [--cwd P] [--split right|down] [-- <argv...>]
+                                 エージェントを新 window/split で起動(argv 省略時は name を実行)
+  worktree <branch> [--cwd P]    git worktree を作成し新 window で開く
+  integration install <agent>    エージェント側フックを導入(対応: claude)
+  integration uninstall <agent>  フックを除去
+  detect <pane_id>               画面検知を即時実行(デバッグ用)
+  notify <title> [body]          通知を送る
+
+<target>: pane ID(%3)/ tmux ターゲット(sess:1.2)/ エージェント名(claude)
+EOF
+}
+
+die() {
+	echo "loom: $*" >&2
+	exit 1
+}
+
+# pane ID が実在するか(display-message は不在 pane でも exit 0 で空を返すため、
+# 存在確認は list-panes の完全一致で行う)
+pane_exists() { # <pane_id>
+	tmux list-panes -a -F '#{pane_id}' | grep -qx -- "$1"
+}
+
+# <target> を pane ID に解決する。% や : . を含めば tmux ターゲットとして、
+# それ以外は @loom_agent の一致するエージェント名として探す。
+# 呼び出し側は `pane=$(resolve_target "$t") || exit $?` の形で失敗を伝播すること
+resolve_target() { # <target>
+	case $1 in
+	(%*)
+		pane_exists "$1" || die "pane が見つかりません: $1"
+		printf '%s\n' "$1"
+		return 0
+		;;
+	(*:* | *.*)
+		_p=$(tmux display-message -p -t "$1" '#{pane_id}' 2>/dev/null)
+		[ -n "$_p" ] || die "pane が見つかりません: $1"
+		printf '%s\n' "$_p"
+		return 0
+		;;
+	esac
+	_m=$(tmux list-panes -a -F "#{pane_id}${TAB}#{@loom_agent}" |
+		awk -F "$TAB" -v t="$1" '$2 == t { print $1 }')
+	[ -n "$_m" ] || die "エージェントが見つかりません: $1(loom list で確認)"
+	if [ "$(printf '%s\n' "$_m" | wc -l)" -gt 1 ]; then
+		die "エージェント $1 は複数あります。pane ID で指定してください: $(printf '%s' "$_m" | tr '\n' ' ')"
+	fi
+	printf '%s\n' "$_m"
+}
+
+# 引数 1 つをシェル 1 語に quote する(tmux new-window へ渡すコマンド文字列用)
+shquote() { # <arg>
+	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+cmd_list() {
+	json=no
+	case ${1:-} in
+	(--json) json=yes ;;
+	('') ;;
+	(*) die "不明な引数: $1" ;;
+	esac
+	loom_detect_all
+	rows=$(loom_rows)
+	if [ "$json" = yes ]; then
+		printf '%s\n' "$rows" | awk -F "$TAB" '
+			function esc(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
+			BEGIN { printf "["; sep = "\n" }
+			NF {
+				printf "%s  {\"pane\":\"%s\",\"agent\":\"%s\",\"status\":\"%s\",\"location\":\"%s\",\"since\":%s,\"path\":\"%s\"}",
+					sep, esc($2), esc($4), esc($3), esc($5), ($6 == "" ? "null" : $6), esc($7)
+				sep = ",\n"
+			}
+			END { print "\n]" }
+		'
+	else
+		[ -n "$rows" ] || return 0
+		printf '%s\n' "$rows" | while IFS="$TAB" read -r _pri pane status agent loc since path; do
+			printf '%-6s %-8s %-8s %-20s %5s  %s\n' \
+				"$pane" "$agent" "$status" "$loc" "$(loom_fmt_duration "$since")" "$path"
+		done
+	fi
+}
+
+cmd_get() {
+	[ $# -eq 1 ] || die "usage: loom get <target>"
+	pane=$(resolve_target "$1") || exit $?
+	LOOM_NOTIFY=off "$LOOM_ROOT/scripts/detect.sh" "$pane"
+	tmux display-message -p -t "$pane" "pane: #{pane_id}
+agent: #{@loom_agent}
+status: #{@loom_status}
+since: #{@loom_status_since}
+location: #{session_name}:#{window_index}.#{pane_index}
+path: #{pane_current_path}"
+}
+
+cmd_send() {
+	enter=yes
+	if [ "${1:-}" = --no-enter ]; then
+		enter=no
+		shift
+	fi
+	[ $# -ge 2 ] || die "usage: loom send [--no-enter] <target> <text...>"
+	target=$1
+	shift
+	pane=$(resolve_target "$target") || exit $?
+	tmux send-keys -t "$pane" -l -- "$*"
+	if [ "$enter" = yes ]; then
+		# Codex treats keys arriving within a few ms of each other as a paste burst and
+		# turns an Enter inside the burst into a newline instead of a submit. A short
+		# pause separates the Enter from the text (harmless for Claude Code / Copilot)
+		sleep 0.1
+		tmux send-keys -t "$pane" Enter
+	fi
+}
+
+cmd_read() {
+	[ $# -ge 1 ] || die "usage: loom read <target> [--lines N]"
+	target=$1
+	shift
+	lines=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		(--lines)
+			[ $# -ge 2 ] || die "--lines には値が必要です"
+			lines=$2
+			shift 2
+			;;
+		(*) die "不明な引数: $1" ;;
+		esac
+	done
+	pane=$(resolve_target "$target") || exit $?
+	if [ -z "$lines" ]; then
+		exec tmux capture-pane -p -t "$pane"
+	fi
+	[ "$lines" -gt 0 ] 2>/dev/null || die "--lines は正の整数で指定してください"
+	# scrollback を含む末尾 N 行(末尾の空行は除く)
+	tmux capture-pane -p -t "$pane" -S "-$lines" | loom_tail_lines "$lines"
+}
+
+cmd_focus() {
+	[ $# -eq 1 ] || die "usage: loom focus <target>"
+	pane=$(resolve_target "$1") || exit $?
+	win=$(tmux display-message -p -t "$pane" '#{session_name}:#{window_index}')
+	tmux switch-client -t "$win" 2>/dev/null || true
+	tmux select-window -t "$win" 2>/dev/null || true
+	tmux select-pane -t "$pane"
+}
+
+cmd_wait() {
+	[ $# -ge 1 ] || die "usage: loom wait <target> --status <s> | --match <re> [--timeout SEC]"
+	target=$1
+	shift
+	want="" match="" timeout=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		(--status)
+			[ $# -ge 2 ] || die "--status には値が必要です"
+			want=$2
+			shift 2
+			;;
+		(--match)
+			[ $# -ge 2 ] || die "--match には値が必要です"
+			match=$2
+			shift 2
+			;;
+		(--timeout)
+			[ $# -ge 2 ] || die "--timeout には値が必要です"
+			timeout=$2
+			shift 2
+			;;
+		(*) die "不明な引数: $1" ;;
+		esac
+	done
+	if [ -n "$want" ] && [ -n "$match" ]; then
+		die "--status と --match は同時に指定できません"
+	fi
+	[ -n "$want$match" ] || die "--status か --match のどちらかが必要です"
+	if [ -n "$want" ]; then
+		case $want in
+		(working | idle | blocked | unknown) ;;
+		(*) die "--status は working|idle|blocked|unknown" ;;
+		esac
+	fi
+	if [ -n "$timeout" ]; then
+		[ "$timeout" -gt 0 ] 2>/dev/null || die "--timeout は正の整数(秒)で指定してください"
+	fi
+	pane=$(resolve_target "$target") || exit $?
+	end=""
+	[ -n "$timeout" ] && end=$(($(date +%s) + timeout))
+	i=0
+	while :; do
+		pane_exists "$pane" || die "pane が終了しました: $pane"
+		if [ -n "$want" ]; then
+			# フック未導入・無出力契機(monitor-silence)が来ない pane でも状態が
+			# 進むよう、2 秒ごとに画面検知も回す(遷移通知は通常どおり発火する)
+			[ $((i % 4)) -eq 0 ] && "$LOOM_ROOT/scripts/detect.sh" "$pane" >/dev/null 2>&1
+			[ "$(loom_opt "$pane" @loom_status)" = "$want" ] && return 0
+		else
+			tmux capture-pane -p -t "$pane" 2>/dev/null | grep -qE -- "$match" && return 0
+		fi
+		if [ -n "$end" ] && [ "$(date +%s)" -ge "$end" ]; then
+			echo "loom: wait タイムアウト(${timeout}s)" >&2
+			return 1
+		fi
+		sleep 0.5
+		i=$((i + 1))
+	done
+}
+
+cmd_start() {
+	[ $# -ge 1 ] || die "usage: loom start <name> [--cwd P] [--split right|down] [-- <argv...>]"
+	name=$1
+	shift
+	cwd="" split=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		(--cwd)
+			[ $# -ge 2 ] || die "--cwd には値が必要です"
+			cwd=$2
+			shift 2
+			;;
+		(--split)
+			[ $# -ge 2 ] || die "--split には値が必要です"
+			split=$2
+			shift 2
+			;;
+		(--)
+			shift
+			break
+			;;
+		(*) die "不明な引数: $1(コマンドは -- の後に置く)" ;;
+		esac
+	done
+	[ $# -gt 0 ] || set -- "$name"
+	# tmux の shell-command は 1 引数なので、argv を quote して 1 本に結合する
+	cmdstr=""
+	for a in "$@"; do
+		cmdstr="$cmdstr $(shquote "$a")"
+	done
+	case $split in
+	('')
+		# 呼び出し元 pane のセッションを明示する。未指定だと直近アクティブな
+		# セッション/window が使われ、呼び出し元と一致しないことがある
+		if [ -n "${TMUX_PANE:-}" ]; then
+			sess=$(tmux display-message -p -t "$TMUX_PANE" '#{session_name}')
+			set -- -t "$sess:"
+		else
+			set --
+		fi
+		if [ -n "$cwd" ]; then
+			pane=$(tmux new-window -P -F '#{pane_id}' -n "$name" -c "$cwd" "$@" "$cmdstr")
+		else
+			pane=$(tmux new-window -P -F '#{pane_id}' -n "$name" "$@" "$cmdstr")
+		fi
+		;;
+	(right | down)
+		[ "$split" = right ] && flag=-h || flag=-v
+		# 分割対象は呼び出し元 pane に固定する(理由は上と同じ)
+		if [ -n "${TMUX_PANE:-}" ]; then
+			set -- -t "$TMUX_PANE"
+		else
+			set --
+		fi
+		if [ -n "$cwd" ]; then
+			pane=$(tmux split-window -P -F '#{pane_id}' "$flag" -c "$cwd" "$@" "$cmdstr")
+		else
+			pane=$(tmux split-window -P -F '#{pane_id}' "$flag" "$@" "$cmdstr")
+		fi
+		;;
+	(*) die "--split は right|down" ;;
+	esac
+	[ -n "$pane" ] || exit 1
+	# 検知を待たずに一覧へ出せるよう agent 名を先付けする(検知で上書きされうる)
+	tmux set-option -p -t "$pane" @loom_agent "$name"
+	printf '%s\n' "$pane"
+}
+
+cmd_worktree() {
+	[ $# -ge 1 ] || die "usage: loom worktree <branch> [--cwd P]"
+	branch=$1
+	shift
+	cwd=$PWD
+	while [ $# -gt 0 ]; do
+		case $1 in
+		(--cwd)
+			[ $# -ge 2 ] || die "--cwd には値が必要です"
+			cwd=$2
+			shift 2
+			;;
+		(*) die "不明な引数: $1" ;;
+		esac
+	done
+	root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) ||
+		die "git リポジトリではありません: $cwd"
+	slug=$(printf '%s' "$branch" | tr '/' '-')
+	wt="$(dirname "$root")/$(basename "$root")-$slug"
+	if [ -e "$wt" ]; then
+		# 既に worktree(等の git 作業ツリー)ならそのまま window を開く
+		git -C "$wt" rev-parse --show-toplevel >/dev/null 2>&1 ||
+			die "既存のパスと衝突します: $wt"
+	elif git -C "$root" show-ref --verify --quiet "refs/heads/$branch"; then
+		git -C "$root" worktree add "$wt" "$branch" || exit 1
+	else
+		git -C "$root" worktree add -b "$branch" "$wt" || exit 1
+	fi
+	# 呼び出し元 pane のセッションに window を作る(cmd_start と同じ理由)
+	if [ -n "${TMUX_PANE:-}" ]; then
+		sess=$(tmux display-message -p -t "$TMUX_PANE" '#{session_name}')
+		pane=$(tmux new-window -P -F '#{pane_id}' -n "$slug" -c "$wt" -t "$sess:")
+	else
+		pane=$(tmux new-window -P -F '#{pane_id}' -n "$slug" -c "$wt")
+	fi
+	[ -n "$pane" ] || exit 1
+	printf '%s\t%s\n' "$pane" "$wt"
+}
+
+cmd=${1:-help}
+[ $# -gt 0 ] && shift
+
+case $cmd in
+(list) cmd_list "$@" ;;
+(get) cmd_get "$@" ;;
+(send) cmd_send "$@" ;;
+(read) cmd_read "$@" ;;
+(focus) cmd_focus "$@" ;;
+(wait) cmd_wait "$@" ;;
+(start) cmd_start "$@" ;;
+(worktree) cmd_worktree "$@" ;;
+(integration)
+	sub=${1:-}
+	agent=${2:-}
+	case $sub in
+	(install | uninstall) ;;
+	(*)
+		usage >&2
+		exit 2
+		;;
+	esac
+	if [ ! -f "$LOOM_ROOT/integrations/$agent.sh" ]; then
+		echo "loom: 未対応のエージェント: ${agent:-(未指定)}(対応: claude)" >&2
+		exit 2
+	fi
+	exec sh "$LOOM_ROOT/integrations/$agent.sh" "$sub"
+	;;
+(detect)
+	pane=${1:-}
+	if [ -z "$pane" ]; then
+		echo "usage: loom detect <pane_id>" >&2
+		exit 2
+	fi
+	exec "$LOOM_ROOT/scripts/detect.sh" "$pane" --print
+	;;
+(notify)
+	exec "$LOOM_ROOT/scripts/notify.sh" "$@"
+	;;
+(help | --help | -h)
+	usage
+	;;
+(*)
+	usage >&2
+	exit 2
+	;;
+esac

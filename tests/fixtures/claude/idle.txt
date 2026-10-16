@@ -1,0 +1,36 @@
+ ▐▛███▛█   Claude Code v2.1.301
+▝▜██████▀  Fable 5.1 with high effort · Claude Max
+ ▝▝   ▝▝   /tmp/project
+
+  Updated to latest. Got 57 features, 384 bugfixes, and 117 other changes.
+  code.claude.com/docs/en/changelog for details
+
+
+❯ Reply with just the word hi
+
+⏺ hi
+
+✻ Crunched for 1s · done 2:02 PM
+
+❯ Run the bash command sleep 6 and then reply done
+
+⏺ Bash(sleep 6)
+  ⎿  (No output)
+  ⎿  Allowed by auto mode classifier
+
+⏺ done
+
+✻ Churned for 10s · done 2:03 PM
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    [Fable 5.1] | 📁 /tmp/project | 🧠 4% | 💰 $0.6…
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents
+
+
+
+
+
+
+

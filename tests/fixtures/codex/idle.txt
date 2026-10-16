@@ -1,0 +1,36 @@
+› hi
+
+
+■ unexpected status 401 Unauthorized: Incorrect API key provided: sk-dummy******test. You can find your API key at https://platform.openai.com/account/api-
+keys., url: https://api.openai.com/v1/responses, cf-ray: a4b48715ea34d777-NRT, request id: req_b7b077eb16514eff967eb47856af8408, auth error: 401, auth error
+code: invalid_api_key
+
+
+› ping via loom senddelay test 0.05
+
+
+■ unexpected status 401 Unauthorized: Incorrect API key provided: sk-dummy******test. You can find your API key at https://platform.openai.com/account/api-
+keys., url: https://api.openai.com/v1/responses, cf-ray: a4b487ebca938be0-NRT, request id: req_213fbf2246684f74b1f682cd26c5a660, auth error: 401, auth error
+code: invalid_api_key
+
+
+› delay test 0.15
+
+
+■ unexpected status 401 Unauthorized: Incorrect API key provided: sk-dummy******test. You can find your API key at https://platform.openai.com/account/api-
+keys., url: https://api.openai.com/v1/responses, cf-ray: a4b488239942d74b-NRT, request id: req_5433191f94084c98b96dde6f234e3ce2, auth error: 401, auth error
+code: invalid_api_key
+
+
+› delay test 0.3
+
+
+■ unexpected status 401 Unauthorized: Incorrect API key provided: sk-dummy******test. You can find your API key at https://platform.openai.com/account/api-
+keys., url: https://api.openai.com/v1/responses, cf-ray: a4b4886358e8ef1e-NRT, request id: req_e27e0e21fd784c85acf4e48df621923b, auth error: 401, auth error
+code: invalid_api_key
+
+
+› Ask Codex to do anything
+
+  GPT-6.1-Sol default · /tmp/project
+  esc again to edit previous message

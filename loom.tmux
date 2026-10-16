@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # loom.tmux — TPM entry point: loads options, binds keys, and wires the alert-silence hook
-# .tmux.conf: set -g @plugin '<you>/Loom'
+# .tmux.conf: set -g @plugin 'Jun-Jin/Loom'
 
 CURRENT_DIR=$(cd "$(dirname "$0")" && pwd)
 
